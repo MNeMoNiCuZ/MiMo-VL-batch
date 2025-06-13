@@ -36,38 +36,51 @@ _Remember to install pytorch before requirements!_
 This runs captioning on all images in the /input/-folder.
 
 ## Configuration
-You may want to open up `batch.py` and edit the configuration options at the top of the script.
-
-Most of these settings are also available as input arguments.
+Edit `config.yaml` to configure.
 
 ```
-# Generic options
-PRINT_CAPTIONS = True           # Print generated captions to console
-PRINT_CAPTIONING_STATUS = False # Print status messages for caption saving
-OVERWRITE = True                # Overwrite existing caption files
-PREPEND_STRING = ""             # String to prepend to captions
-APPEND_STRING = ""              # String to append to captions
-STRIP_LINEBREAKS = True         # Remove line breaks from captions
-DEFAULT_SAVE_FORMAT = ".txt"    # Default file extension for caption files
+# General options for captioning script
+print_captions: true                        # Print generated captions to console
+print_captioning_status: false              # Print status messages for caption saving
+overwrite: false                            # Overwrite existing caption files
+prepend_string: ""                          # String to prepend to captions
+append_string: ""                           # String to append to captions
+strip_linebreaks: true                      # Remove line breaks from captions
+save_format: ".txt"                         # Default file extension for caption files
 
-# MiMo options
-INCLUDE_THINKING = False        # Include <think> tag content in output
-OUTPUT_JSON = False             # Save captions as JSON instead of plain text
-REMOVE_CHINESE = True           # Remove Chinese characters from captions
-NORMALIZE_TEXT = True           # Normalize punctuation and remove Markdown
+# MiMo-specific options
+include_thinking: false                     # Include <think> tag content in output
+output_json: false                          # Save captions as JSON instead of plain text
+remove_chinese: true                        # Remove Chinese characters from captions
+normalize_text: true                        # Normalize punctuation and remove Markdown
 
 # Image resizing options
-MAX_WIDTH = 1024                # Maximum width for resized images
-MAX_HEIGHT = 1024               # Maximum height for resized images
+max_width: 1024                             # Maximum width for resized images
+max_height: 1024                            # Maximum height for resized images
 
 # Generation parameters
-REPETITION_PENALTY = 1.2        # Penalty for repeated tokens
-TEMPERATURE = 0.8               # Sampling temperature
-TOP_K = 50                      # Top-k sampling parameter
+repetition_penalty: 1.2                     # Penalty for repeated tokens
+temperature: 0.8                            # Sampling temperature
+top_k: 50                                   # Top-k sampling parameter
+
+# Custom prompt options
+use_custom_prompts: false                   # Enable custom prompts per image
+custom_prompt_extension: ".customprompt"    # Extension for custom prompt files
+
+# Default folder paths
+input_folder: "input"                       # Default input folder relative to script
+output_folder: "input"                      # Default output folder relative to script
+
+# Default prompts
+default_system_prompt: "You are a helpful image captioning model tasked with generating accurate and concise descriptions based on the provided user prompt."
+default_prompt: "In one medium long sentence, caption the key aspects of this image"
 ```
 
+This default configuration will be used if you simply run the script.
+
+You can also run the script with input arguments which will supercede any of these settings.
+
 ## Example prompts
-You can edit `batch.py` in a text editor and edit the DEFAULT_PROMPT value to change the captioning prompt.
 
 ![input_image](https://github.com/user-attachments/assets/bbed740c-3351-43e1-b019-42bf77d97fe0)
 
