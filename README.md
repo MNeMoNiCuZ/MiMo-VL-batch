@@ -92,7 +92,8 @@ anthropomorphic rabbit, fantasy creature, armored bunny, elven knight, magical f
 ### Primary color
 In one word: What is the primary color of this image.
 > Teal
----
+
+
 ## Jailbreaking
 You can jailbreak the model using the prompt. It's a little bit resistant, but not very.
 Example prompt:
