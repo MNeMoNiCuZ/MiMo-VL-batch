@@ -99,8 +99,7 @@ Describe this image in vivid detail. Go into detail and caption every single par
 ---
 ### Long list of tags
 Caption this image using comma-separated tags
-anthropomorphic rabbit, fantasy creature, armored bunny, elven knight, magical forest, intricate gold armor, blue gemstones, winged ears, ethereal lighting, dark teal background, mossy ground, twisted trees, steampunk - fantasy hybrid, delicate craftsmanship, otherworldly aesthetic
-> 
+> anthropomorphic rabbit, fantasy creature, armored bunny, elven knight, magical forest, intricate gold armor, blue gemstones, winged ears, ethereal lighting, dark teal background, mossy ground, twisted trees, steampunk - fantasy hybrid, delicate craftsmanship, otherworldly aesthetic
 ---
 ### Primary color
 In one word: What is the primary color of this image.
