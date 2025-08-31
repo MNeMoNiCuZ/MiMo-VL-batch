@@ -47,6 +47,7 @@ def parse_arguments():
     parser.add_argument("--strip_linebreaks", action="store_true", default=None, help="Remove line breaks from captions.")
     parser.add_argument("--use_custom_prompts", action="store_true", default=None, help="Enable custom prompts per image.")
     parser.add_argument("--custom_prompt_extension", type=str, default=None, help="File extension for custom prompt files.")
+    parser.add_argument("--use_metadata_prompts", action="store_true", default=None, help="Enable extracting prompts from image metadata.")
     return parser.parse_args()
 
 def filter_images_without_output(input_folder, save_format, overwrite):
@@ -130,18 +131,55 @@ def save_caption_to_file(image_path, caption, thinking_text, settings):
             print(f"Failed to save caption for {os.path.abspath(image_path)}: {e}")
 
 def get_custom_prompt(image_path, settings):
-    if not settings['use_custom_prompts']:
-        return settings['prompt']
-    prompt_file = os.path.splitext(image_path)[0] + settings['custom_prompt_extension']
-    if os.path.exists(prompt_file):
-        try:
-            with open(prompt_file, "r", encoding="utf-8") as f:
-                custom_prompt = f.read().strip()
-            if custom_prompt:
-                return custom_prompt
-        except Exception as e:
-            print(f"Error reading custom prompt for {image_path}: {e}")
+    # Priority 1: Custom prompt file
+    if settings['use_custom_prompts']:
+        prompt_file = os.path.splitext(image_path)[0] + settings['custom_prompt_extension']
+        if os.path.exists(prompt_file):
+            try:
+                with open(prompt_file, "r", encoding="utf-8") as f:
+                    custom_prompt = f.read().strip()
+                if custom_prompt:
+                    return custom_prompt
+            except Exception as e:
+                print(f"Error reading custom prompt for {image_path}: {e}")
+
+    # Priority 2: Metadata prompt
+    if settings['use_metadata_prompts']:
+        metadata_prompt = _extract_metadata_from_file(image_path)
+        if metadata_prompt:
+            return metadata_prompt
+
+    # Priority 3: Default prompt
     return settings['prompt']
+
+def _parse_png_parameters(metadata):
+    parsed_data = {"positive_prompt": ""}
+    params_str = metadata.get('metadata', {}).get('parameters', '')
+    if not isinstance(params_str, str):
+        return None
+    neg_prompt_index = params_str.find('Negative prompt:')
+    steps_index = params_str.find('Steps:')
+    if neg_prompt_index != -1:
+        parsed_data['positive_prompt'] = params_str[:neg_prompt_index].strip()
+    elif steps_index != -1:
+        parsed_data['positive_prompt'] = params_str[:steps_index].strip()
+    else:
+        parsed_data['positive_prompt'] = params_str.strip()
+    return parsed_data['positive_prompt']
+
+def _extract_metadata_from_file(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if ext == '.png':
+            with Image.open(file_path) as img:
+                info = dict(img.info)
+            metadata = {"file_path": file_path, "metadata": info}
+            return _parse_png_parameters(metadata)
+        else:
+            return None
+    except Exception as e:
+        print(f"Error reading metadata from {file_path}: {e}")
+        return None
 
 def process_images_in_folder(images_to_caption, settings, mimo_model, mimo_processor):
     for image_path in tqdm(images_to_caption, desc="Processing Images"):
@@ -329,7 +367,8 @@ if __name__ == "__main__":
         'append_string': args.append_string if args.append_string is not None else config['append_string'],
         'strip_linebreaks': args.strip_linebreaks if args.strip_linebreaks is not None else config['strip_linebreaks'],
         'use_custom_prompts': args.use_custom_prompts if args.use_custom_prompts is not None else config['use_custom_prompts'],
-        'custom_prompt_extension': args.custom_prompt_extension if args.custom_prompt_extension is not None else config['custom_prompt_extension']
+        'custom_prompt_extension': args.custom_prompt_extension if args.custom_prompt_extension is not None else config['custom_prompt_extension'],
+        'use_metadata_prompts': args.use_metadata_prompts if args.use_metadata_prompts is not None else config.get('use_metadata_prompts', False)
     }
     
     # Resolve relative paths for folders
