@@ -74,10 +74,10 @@ def remove_chinese_chars(text):
 def normalize_text(text):
     replacements = {
         '\u2014': ', ',  # Em dash (—) to comma and space
-        '\u2018': "'",   # Left single quote (‘) to apostrophe
-        '\u2019': "'",   # Right single quote (’) to apostrophe
-        '\u201c': '"',   # Left double quote (“) to straight quote
-        '\u201d': '"',   # Right double quote (”) to straight quote
+        '\u2018': "'",   # Left single quote (') to apostrophe
+        '\u2019': "'",   # Right single quote (') to apostrophe
+        '\u201c': '"',   # Left double quote (") to straight quote
+        '\u201d': '"',   # Right double quote (") to straight quote
         '\u3002': '',    # Ideographic full stop (。) to empty
         '\uff1a': '',    # Full-width colon (：) to empty
         '\u3001': '',    # Ideographic comma (，) to empty
@@ -131,28 +131,6 @@ def save_caption_to_file(image_path, caption, thinking_text, settings):
         except Exception as e:
             print(f"Failed to save caption for {os.path.abspath(image_path)}: {e}")
 
-def get_custom_prompt(image_path, settings):
-    # Priority 1: Custom prompt file
-    if settings['use_custom_prompts']:
-        prompt_file = os.path.splitext(image_path)[0] + settings['custom_prompt_extension']
-        if os.path.exists(prompt_file):
-            try:
-                with open(prompt_file, "r", encoding="utf-8") as f:
-                    custom_prompt = f.read().strip()
-                if custom_prompt:
-                    return custom_prompt
-            except Exception as e:
-                print(f"Error reading custom prompt for {image_path}: {e}")
-
-    # Priority 2: Metadata prompt
-    if settings['use_metadata_prompts']:
-        metadata_prompt = _extract_metadata_from_file(image_path)
-        if metadata_prompt:
-            return metadata_prompt
-
-    # Priority 3: Default prompt
-    return settings['prompt']
-
 def _parse_png_parameters(metadata):
     parsed_data = {"positive_prompt": ""}
     params_str = metadata.get('metadata', {}).get('parameters', '')
@@ -181,6 +159,28 @@ def _extract_metadata_from_file(file_path):
     except Exception as e:
         print(f"Error reading metadata from {file_path}: {e}")
         return None
+
+def get_custom_prompt(image_path, settings):
+    # Priority 1: Custom prompt file
+    if settings['use_custom_prompts']:
+        prompt_file = os.path.splitext(image_path)[0] + settings['custom_prompt_extension']
+        if os.path.exists(prompt_file):
+            try:
+                with open(prompt_file, "r", encoding="utf-8") as f:
+                    custom_prompt = f.read().strip()
+                if custom_prompt:
+                    return custom_prompt
+            except Exception as e:
+                print(f"Error reading custom prompt for {image_path}: {e}")
+
+    # Priority 2: Metadata prompt
+    if settings['use_metadata_prompts']:
+        metadata_prompt = _extract_metadata_from_file(image_path)
+        if metadata_prompt:
+            return metadata_prompt
+
+    # Priority 3: Default prompt
+    return settings['prompt']
 
 def process_images_in_folder(images_to_caption, settings, mimo_model, mimo_processor):
     batch_size = settings.get('batch_size', 1)

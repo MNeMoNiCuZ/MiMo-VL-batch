@@ -18,20 +18,20 @@ max_width: 1024                             # Maximum width for resized images
 max_height: 1024                            # Maximum height for resized images
 
 # Generation parameters
-batch_size: 24                               # Images to process simultaneously. 16 = 26gb. 24 = 30gb.
+batch_size: 24                               # Images to process simultaneously. 16 = 26gb. 24 = 30gb
 repetition_penalty: 1.2                     # Penalty for repeated tokens
 temperature: 0.8                            # Sampling temperature
 top_k: 50                                   # Top-k sampling parameter
 
 # Prompt Options (in order of priority)
-# 1. Custom Prompt File: Highest priority. If enabled and a corresponding file is found, its content is used as the prompt.
-use_custom_prompts: false                   # Enable custom prompts per image.
-custom_prompt_extension: ".customprompt"    # File extension for custom prompt files (e.g., image.customprompt).
+# 1. Custom Prompt File: Highest priority. If enabled and a corresponding file is found, its content is used as the prompt
+use_custom_prompts: false                   # Enable custom prompts per image
+custom_prompt_extension: ".customprompt"    # File extension for custom prompt files (e.g., image.customprompt)
 
-# 2. Image Metadata Prompt: Second priority. If enabled, the script will try to extract the prompt from the image's metadata.
-use_metadata_prompts: false                 # Enable extracting prompts from image metadata.
+# 2. Image Metadata Prompt: Second priority. If enabled, the script will try to extract the prompt from the image's metadata
+use_metadata_prompts: false                 # Enable extracting prompts from image metadata
 
-# 3. Default Prompt: Lowest priority. Used if the options above are disabled or do not yield a prompt.
+# 3. Default Prompt: Lowest priority. Used if the options above are disabled or do not yield a prompt
 
 # Default folder paths
 input_folder: "input"                       # Default input folder relative to script
