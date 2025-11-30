@@ -32,6 +32,7 @@ def parse_arguments():
     parser.add_argument("--save_format", type=str, default=None, help="Format for captions.")
     parser.add_argument("--max_width", type=int, default=None, help="Max width for resizing.")
     parser.add_argument("--max_height", type=int, default=None, help="Max height for resizing.")
+    parser.add_argument("--batch_size", type=int, default=None, help="Number of images to process in a single batch.")
     parser.add_argument("--repetition_penalty", type=float, default=None, help="Repetition penalty.")
     parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature.")
     parser.add_argument("--top_k", type=int, default=None, help="Top-k sampling.")
@@ -144,17 +145,42 @@ def get_custom_prompt(image_path, settings):
     return settings['prompt']
 
 def process_images_in_folder(images_to_caption, settings, mimo_model, mimo_processor):
-    for image_path in tqdm(images_to_caption, desc="Processing Images"):
+    batch_size = settings.get('batch_size', 1)
+    
+    for i in tqdm(range(0, len(images_to_caption), batch_size), desc="Processing Batches"):
+        batch_paths = images_to_caption[i:i+batch_size]
+        batch_images = []
+        batch_prompts = []
+
+        for image_path in batch_paths:
+            try:
+                with Image.open(image_path) as img:
+                    img.verify()
+                img = Image.open(image_path).convert("RGB")
+                image = resize_image_proportionally(img, settings['max_width'], settings['max_height'])
+                batch_images.append(image)
+                batch_prompts.append(get_custom_prompt(image_path, settings))
+            except Exception as e:
+                print(f"Error loading image {image_path}: {e}")
+                # Add placeholders to keep batch size consistent for processing
+                batch_images.append(None)
+                batch_prompts.append(None)
+
+        # Filter out failed loads
+        valid_indices = [j for j, img in enumerate(batch_images) if img is not None]
+        if not valid_indices:
+            print(f"Skipping batch starting at index {i} as no images could be loaded.")
+            continue
+
+        valid_images = [batch_images[j] for j in valid_indices]
+        valid_prompts = [batch_prompts[j] for j in valid_indices]
+        valid_paths = [batch_paths[j] for j in valid_indices]
+
         try:
-            with Image.open(image_path) as img:
-                img.verify()
-            img = Image.open(image_path).convert("RGB")
-            image = resize_image_proportionally(img, settings['max_width'], settings['max_height'])
-            image_prompt = get_custom_prompt(image_path, settings)
-            caption, thinking_text = mimo_caption(
-                image,
+            results = mimo_caption(
+                valid_images,
                 settings['system_prompt'],
-                image_prompt,
+                valid_prompts,
                 settings['repetition_penalty'],
                 settings['temperature'],
                 settings['top_k'],
@@ -164,19 +190,26 @@ def process_images_in_folder(images_to_caption, settings, mimo_model, mimo_proce
                 mimo_processor,
                 settings['strip_linebreaks']
             )
-            if len(caption.strip()) < 10:
-                print(f"Short caption for {image_path}: '{caption}'")
-            if not caption.strip() and not thinking_text.strip():
-                print(f"Empty output for {image_path}, saving fallback caption.")
-                save_caption_to_file(image_path, "Failed to generate caption", "", settings)
-                continue
-            save_caption_to_file(image_path, caption, thinking_text, settings)
-            if settings['print_captions']:
-                print(f"Caption for {image_path}: {caption}")
+
+            for idx, (caption, thinking_text) in enumerate(results):
+                image_path = valid_paths[idx]
+                if len(caption.strip()) < 10:
+                    print(f"Short caption for {image_path}: '{caption}'")
+                if not caption.strip() and not thinking_text.strip():
+                    print(f"Empty output for {image_path}, saving fallback caption.")
+                    save_caption_to_file(image_path, "Failed to generate caption", "", settings)
+                    continue
+                save_caption_to_file(image_path, caption, thinking_text, settings)
+                if settings['print_captions']:
+                    print(f"Caption for {image_path}: {caption}")
+
         except Exception as e:
-            print(f"Error processing {image_path}: {e}")
-            save_caption_to_file(image_path, "Failed to generate caption", "", settings)
+            print(f"Error processing batch starting with {batch_paths[0]}: {e}")
+            for image_path in valid_paths:
+                save_caption_to_file(image_path, "Failed to generate caption", "", settings)
+        
         torch.cuda.empty_cache()
+
 
 def resize_image_proportionally(image, max_width=None, max_height=None):
     if (max_width is None or max_width <= 0) and (max_height is None or max_height <= 0):
@@ -198,37 +231,28 @@ def resize_image_proportionally(image, max_width=None, max_height=None):
     resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
     return resized_image
 
-def mimo_caption(image, system_prompt, prompt, repetition_penalty, temperature, top_k, output_json, include_thinking, mimo_model, mimo_processor, strip_linebreaks):
+def mimo_caption(images, system_prompt, prompts, repetition_penalty, temperature, top_k, output_json, include_thinking, mimo_model, mimo_processor, strip_linebreaks):
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available. Please ensure PyTorch is compiled with CUDA support.")
-    if not isinstance(image, Image.Image):
-        image = Image.fromarray(np.uint8(image))
-    conversation = [
-        {
-            "role": "system",
-            "content": [
-                {"type": "text", "text": system_prompt},
-            ],
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "image"},
-                {"type": "text", "text": prompt},
-            ],
-        }
-    ]
+
+    conversations = []
+    for prompt in prompts:
+        conversation = [
+            {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
+            {"role": "user", "content": [{"type": "image"}, {"type": "text", "text": prompt}]}
+        ]
+        conversations.append(conversation)
+
     try:
-        text_prompt = mimo_processor.apply_chat_template(
-            conversation, add_generation_prompt=True
-        )
+        text_prompts = [mimo_processor.apply_chat_template(conv, add_generation_prompt=True) for conv in conversations]
+        
         inputs = mimo_processor(
-            text=[text_prompt],
-            images=[image],
+            text=text_prompts,
+            images=images,
             padding=True,
             return_tensors="pt",
-        )
-        inputs = inputs.to("cuda")
+        ).to("cuda")
+
         with torch.no_grad():
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 output_ids = mimo_model.generate(
@@ -240,66 +264,63 @@ def mimo_caption(image, system_prompt, prompt, repetition_penalty, temperature, 
                     top_k=top_k,
                     repetition_penalty=repetition_penalty,
                 )
+
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, output_ids)
         ]
-        output_text = mimo_processor.batch_decode(
+        output_texts = mimo_processor.batch_decode(
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
-        if strip_linebreaks:
-            output_text[0] = output_text[0].replace('\n', ' ')
-        
-        thinking_text = ""
-        caption = output_text[0]
-        think_match = re.search(r'<think>(.*?)</think>', caption, re.DOTALL)
-        if think_match:
-            thinking_text = think_match.group(1).strip()
-            caption = re.sub(r'<think>.*?</think>', '', caption).strip()
-        else:
-            thinking_text = ""
-            caption = re.sub(r'<think>.*$', '', caption).strip()
-        
-        caption = re.sub(r'^#{1,6}\s*', '', caption, flags=re.MULTILINE)
-        caption = re.sub(r'^[-*]\s+', '', caption, flags=re.MULTILINE)
-        caption = re.sub(r'\*\*(.*?)\*\*', r'\1', caption)
-        caption = re.sub(r'\*(.*?)\*', r'\1', caption)
-        caption = re.sub(r'_(.*?)_', r'\1', caption)
-        caption = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', caption)
-        caption = re.sub(r'`(.*?)`', r'\1', caption)
-        caption = re.sub(r'^>\s*(.*?)$', r'\1', caption, flags=re.MULTILINE)
-        caption = re.sub(r'^\d+\.\s*(.*?)$', r'\1', caption, flags=re.MULTILINE)
-        
-        thinking_text = re.sub(r'^#{1,6}\s*', '', thinking_text, flags=re.MULTILINE)
-        thinking_text = re.sub(r'^[-*]\s+', '', thinking_text, flags=re.MULTILINE)
-        thinking_text = re.sub(r'\*\*(.*?)\*\*', r'\1', thinking_text)
-        thinking_text = re.sub(r'\*(.*?)\*', r'\1', thinking_text)
-        thinking_text = re.sub(r'_(.*?)_', r'\1', thinking_text)
-        thinking_text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', thinking_text)
-        thinking_text = re.sub(r'`(.*?)`', r'\1', thinking_text)
-        thinking_text = re.sub(r'^>\s*(.*?)$', r'\1', thinking_text, flags=re.MULTILINE)
-        thinking_text = re.sub(r'^\d+\.\s*(.*?)$', r'\1', thinking_text, flags=re.MULTILINE)
-        
-        if output_json:
-            caption = re.sub(r'<think>.*?</think>|<think>.*$', '', caption).strip()
-            thinking_text = re.sub(r'<think>.*?</think>|<think>.*$', '', thinking_text).strip()
-        
-        caption = re.sub(r'[–—]', '-', caption)
-        caption = re.sub(r'\s+', ' ', caption).strip()
-        thinking_text = re.sub(r'[–—]', '-', thinking_text)
-        thinking_text = re.sub(r'\s+', ' ', thinking_text).strip()
-        
-        if not include_thinking and len(caption) < 10 and thinking_text:
-            print(f"Caption too short ('{caption}'), using thinking text")
-            caption = thinking_text
-            thinking_text = ""
-        
-        if caption and caption[-1] not in '.!?':
-            print(f"Warning: Caption for image may be truncated: {caption[-50:]}")
-        
-        return caption, thinking_text
+
+        results = []
+        for output_text in output_texts:
+            if strip_linebreaks:
+                output_text = output_text.replace('\n', ' ')
+            
+            think_match = re.search(r'<think>(.*?)</think>', output_text, re.DOTALL)
+            if think_match:
+                thinking_text = think_match.group(1).strip()
+                caption = re.sub(r'<think>.*?</think>', '', output_text).strip()
+            else:
+                thinking_text = ""
+                caption = re.sub(r'<think>.*$', '', output_text).strip()
+
+            # Common text cleaning for both caption and thinking_text
+            def clean_text(text):
+                text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+                text = re.sub(r'^[-*]\s+', '', text, flags=re.MULTILINE)
+                text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+                text = re.sub(r'\*(.*?)\*', r'\1', text)
+                text = re.sub(r'_(.*?)_', r'\1', text)
+                text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+                text = re.sub(r'`(.*?)`', r'\1', text)
+                text = re.sub(r'^>\s*(.*?)$', r'\1', text, flags=re.MULTILINE)
+                text = re.sub(r'^\d+\.\s*(.*?)$', r'\1', text, flags=re.MULTILINE)
+                text = re.sub(r'[–—]', '-', text)
+                text = re.sub(r'\s+', ' ', text).strip()
+                return text
+
+            caption = clean_text(caption)
+            thinking_text = clean_text(thinking_text)
+
+            if output_json:
+                caption = re.sub(r'<think>.*?</think>|<think>.*$', '', caption).strip()
+                thinking_text = re.sub(r'<think>.*?</think>|<think>.*$', '', thinking_text).strip()
+
+            if not include_thinking and len(caption) < 10 and thinking_text:
+                print(f"Caption too short ('{caption}'), using thinking text")
+                caption = thinking_text
+                thinking_text = ""
+            
+            if caption and caption[-1] not in '.!?':
+                print(f"Warning: Caption for image may be truncated: {caption[-50:]}")
+            
+            results.append((caption, thinking_text))
+            
+        return results
     except Exception as e:
         print(f"Error in mimo_caption: {e}")
-        return "", ""
+        return [("", "")] * len(images)
 
 if __name__ == "__main__":
     args = parse_arguments()
@@ -316,6 +337,7 @@ if __name__ == "__main__":
         'system_prompt': args.system_prompt if args.system_prompt is not None else config['default_system_prompt'],
         'max_width': args.max_width if args.max_width is not None else config['max_width'],
         'max_height': args.max_height if args.max_height is not None else config['max_height'],
+        'batch_size': args.batch_size if args.batch_size is not None else config.get('batch_size', 1),
         'repetition_penalty': args.repetition_penalty if args.repetition_penalty is not None else config['repetition_penalty'],
         'temperature': args.temperature if args.temperature is not None else config['temperature'],
         'top_k': args.top_k if args.top_k is not None else config['top_k'],
@@ -350,7 +372,14 @@ if __name__ == "__main__":
     print(f"Found {total_images} image{'s' if total_images != 1 else ''} to caption.")
     if not settings['overwrite']:
         print(f"{skipped_images} image{'s' if skipped_images != 1 else ''} already have captions with format {settings['save_format']}, skipping.")
-    print(f"Will caption {len(images_to_caption)} image{'s' if len(images_to_caption) != 1 else ''}.\n")
+    
+    images_to_process_count = len(images_to_caption)
+    batch_size = settings.get('batch_size', 1)
+    total_batches = (images_to_process_count + batch_size - 1) // batch_size if images_to_process_count > 0 else 0
+
+    print(f"Using batch size: {batch_size}")
+    print(f"Total batches required: {total_batches}\n")
+    print(f"Will caption {images_to_process_count} image{'s' if images_to_process_count != 1 else ''}.\n")
     
     if len(images_to_caption) == 0:
         print("No images to process. Exiting.")

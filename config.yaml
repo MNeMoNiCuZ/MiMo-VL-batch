@@ -18,6 +18,7 @@ max_width: 1024                             # Maximum width for resized images
 max_height: 1024                            # Maximum height for resized images
 
 # Generation parameters
+batch_size: 24                               # Images to process simultaneously. 16 = 26gb. 24 = 30gb.
 repetition_penalty: 1.2                     # Penalty for repeated tokens
 temperature: 0.8                            # Sampling temperature
 top_k: 50                                   # Top-k sampling parameter
@@ -32,7 +33,7 @@ output_folder: "input"                      # Default output folder relative to 
 
 # Default prompts
 default_system_prompt: "You are a helpful image captioning model tasked with generating accurate and concise descriptions based on the provided user prompt."
-default_prompt: "In one medium long sentence, caption the key aspects of this image"
+default_prompt: "In one medium long sentence, caption the key subjects of this image. DO NOT mention the artstyle. ONLY describe the subject and things in the image."
 
 # Example prompts for reference (not used in script)
 # tags_prompt:
